@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key><string>__SERVICE_NAME__</string>
+    <key>CFBundleDisplayName</key><string>__SERVICE_NAME__</string>
+    <key>CFBundleIdentifier</key><string>__SERVICE_BUNDLE_ID__</string>
+    <key>CFBundleExecutable</key><string>__SERVICE_EXECUTABLE__</string>
+    <key>CFBundlePackageType</key><string>XPC!</string>
+    <key>CFBundleShortVersionString</key><string>__MARKETING_VERSION__</string>
+    <key>CFBundleVersion</key><string>__BUILD_NUMBER__</string>
+    <key>XPCService</key>
+    <dict>
+        <key>ServiceType</key><string>Application</string>
+    </dict>
+</dict>
+</plist>

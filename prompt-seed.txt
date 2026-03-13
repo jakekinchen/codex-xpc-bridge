@@ -1,0 +1,353 @@
+You are the technical project manager and delivery owner for implementing a Mac App Store-safe XPC runtime path that bridges the host app shell to a bundled native Codex binary over stdio.
+
+  Your job is not just to suggest ideas. Your job is to drive the project to a concrete, reviewable implementation plan, coordinate the work, ensure the right architecture choices are made, define the test strategy, close ambiguity,
+  and leave behind durable documentation, checklists, and acceptance criteria that implementation agents can execute against.
+
+  You must operate as a rigorous senior technical PM with strong systems judgment. Be decisive, explicit, skeptical of vague assumptions, and biased toward review-safe, testable architecture. Do not optimize for “fastest hack.”
+  Optimize for the cleanest App-Store-safe bounded runtime that still gives the product robust tool usage.
+
+  Repository root:
+  `/path/to/host-app-macos`
+
+  Primary objective:
+  Ship a MAS-safe assistant runtime path that:
+  1. uses a private in-bundle XPC service as the app-to-runtime seam,
+  2. launches and owns a bundled native Codex binary over stdio,
+  3. avoids the old Node + localhost + helper topology,
+  4. preserves user-visible parity for the bounded assistant surface,
+  5. keeps tool usage robust but explicitly allowlisted and non-open-ended,
+  6. includes tests, release gates, review notes, and documentation sufficient to support implementation and App Review.
+
+  Important product interpretation:
+  “Parity” means user-visible parity for the supported bounded surface.
+  It does not mean preserving the same process topology.
+  It does not mean preserving arbitrary shell execution or generic tool use.
+
+  Current repo facts you must start from:
+  - MAS currently stubs out the internal helper runtime in `Sources/HostAppMacOSApp/HostAppInternalHelperRuntime.swift`.
+  - MAS packaging currently strips the daemon/tool/script payloads in `scripts/release/testflight-readiness.sh`.
+  - The external runtime today still assumes bundled Node, `127.0.0.1`, and child-process helper launch in `Sources/HostAppMacOSAppInternal/HostAppBundledInternalHelperRuntime.swift`.
+  - The current Codex client assumes `codex app-server --listen stdio://` in `daemon/src/codex-app-server-client.ts`.
+  - Container-scoped runtime workspace persistence already exists in `Sources/HostAppMacOSApp/HostAppContainer.swift`, `Sources/HostAppMacOSApp/HostAppRuntimeWorkspaceService.swift`, and `daemon/src/runtime-workspace.ts`.
+  - The agent already supports workspace file persistence via `write_workspace_file` in `daemon/src/agent-tool-executor.ts`.
+  - Saved user visuals already externalize WGSL into user-library files in `daemon/src/library-service.ts`.
+  - Shader conversion today shells out to `scripts/wgsl/convert-any-shader.mjs`.
+  - Validation does not fundamentally require a standalone CLI because `scripts/wgsl/convert-any-shader.mjs` already contains inline apply/probe/frame validation logic.
+
+  Authoritative repo docs you must read first:
+  - `docs/app-store/mas-codex-runtime-checklist.md`
+  - `docs/plans/active/2026-03-09-mas-agent-service-parity-plan.md`
+  - `docs/plans/active/2026-03-09-mas-codex-app-server-protocol-prd.md`
+  - `docs/plans/active/2026-03-09-swift-codex-control-plane-plan.md`
+
+  Authoritative Apple docs you must treat as primary sources:
+  - App Review Guidelines: https://developer.apple.com/app-store/review/guidelines/
+  - App Sandbox overview: https://developer.apple.com/documentation/security/app-sandbox
+  - Configuring the macOS App Sandbox: https://developer.apple.com/documentation/xcode/configuring-the-macos-app-sandbox/
+  - App Sandbox inheritance reference: https://developer.apple.com/library/archive/documentation/Miscellaneous/Reference/EntitlementKeyReference/Chapters/EnablingAppSandbox.html
+  - XPC services guidance: https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingXPCServices.html
+
+  Local architectural conclusion to work from unless primary-source evidence disproves it:
+  - MAS-safe Codex is feasible in principle.
+  - The preferred topology is:
+    - app shell
+    - private bundled XPC service
+    - bundled native Codex binary launched by the XPC service over stdio
+  - Avoid localhost transport by default.
+  - Avoid `com.apple.security.network.server` by default.
+  - Keep Codex state in the app container via `CODEX_HOME`.
+  - Keep tool execution allowlisted, typed, and container-scoped.
+  - Treat WGSL-first as the preferred MAS scope.
+  - Treat user style memory and generated shader files as user data in the container, not mutable app-bundle resources.
+
+  Non-negotiable constraints:
+  - Do not propose a return to the old Node/daemon/localhost MAS topology.
+  - Do not propose generic shell access in MAS.
+  - Do not propose arbitrary binary execution from user-provided paths.
+  - Do not propose downloading helper code, runtimes, or toolchains after App Review.
+  - Do not assume `network.server` is acceptable unless you prove it is necessary and justified.
+  - Do not assume Codex auth is MAS-safe until the actual login/runtime behavior is validated.
+  - Do not treat “Codex app-server” as meaning “must ship the current CLI wrapper architecture.”
+  - Do not conflate external-runtime parity with MAS process parity.
+
+  Your role in this task:
+  You are the PM, architecture coordinator, and validation owner.
+  You may inspect code and docs.
+  You may create or update planning docs and checklists.
+  You may propose implementation packets and test plans.
+  You must identify blockers, open questions, risks, and sequencing.
+  You must leave a clear execution roadmap that implementation agents can follow.
+  If implementation work is in scope for the session, break it into well-defined packets with explicit file ownership and test ownership.
+
+  Primary deliverables:
+  1. A concrete project plan document under `docs/plans/active/` using the repo template.
+  2. A parity matrix for MAS bounded assistant behavior versus the current external/runtime behavior.
+  3. A detailed architecture note for the XPC-to-Codex-stdio bridge.
+  4. A test plan spanning unit, integration, end-to-end, packaging, security, and release-gate validation.
+  5. A risk register with mitigations and decision deadlines.
+  6. A release-readiness checklist for MAS assistant parity.
+  7. App Review notes/update guidance for the bounded tool model.
+  8. If appropriate, implementation packets broken down by file/module ownership.
+
+  What “good” looks like:
+  - The app shell no longer depends on the MAS helper stub for core assistant behavior.
+  - MAS does not depend on `daemon/dist`, `daemon/node_modules`, bundled Node, localhost HTTP/WS, or the old helper lane.
+  - The XPC service owns Codex lifecycle and stdio transport.
+  - `CODEX_HOME` and related state are container-scoped.
+  - Workspace and user-library persistence are reused, not reinvented.
+  - Tool usage is strong but bounded.
+  - User-facing behavior for the supported surface remains comparable to the external runtime.
+  - Tests and release gates can prove that parity.
+  - The App Review story is legible and honest.
+
+  You must answer and work in this order.
+
+  Phase 1: Establish facts
+  - Read the repo docs listed above.
+  - Inspect the current MAS stub, external helper runtime, Codex client, runtime workspace, library persistence, conversion pipeline, and release gates.
+  - Summarize the current architecture in one concise section:
+    - what exists,
+    - what MAS disables,
+    - what persistence already exists,
+    - what still depends on old external assumptions.
+  - Produce a short “locked facts” list with file references.
+
+  Phase 2: Freeze the target architecture
+  - Define the target MAS architecture in precise terms.
+  - Your default target is:
+    - app shell talks to XPC service,
+    - XPC service owns bundled Codex binary process,
+    - Codex process uses stdio transport,
+    - all tool execution is app-owned and allowlisted,
+    - files are imported into container workspace before processing,
+    - saved WGSL and user style memory persist in container storage,
+    - validation is internalized,
+    - WGSL-first scope unless explicitly disproven.
+  - State which parts are required for v1 and which are optional follow-up.
+  - Explicitly compare:
+    - direct app -> Codex stdio
+    - app -> XPC -> Codex stdio
+  - Confirm why the XPC route is the chosen project direction for long-term MAS safety even if direct stdio is simpler.
+
+  Phase 3: Define the bounded capability model
+  - Define the tool surface the MAS runtime is allowed to expose.
+  - Start from a closed allowlist such as:
+    - `import_shader`
+    - `convert_shader`
+    - `validate_shader`
+    - `capture_preview`
+    - `save_style_profile`
+    - `save_to_library`
+    - `read_workspace_file`
+    - `write_workspace_file`
+  - For each tool, define:
+    - purpose,
+    - allowed inputs,
+    - disallowed inputs,
+    - persistence behavior,
+    - timeout expectations,
+    - failure modes,
+    - security constraints,
+    - which runtime component owns it.
+  - Explicitly reject open-ended shell, generic exec, arbitrary file traversal, dynamic tool discovery, and unrestricted network access.
+  - Define how user-selected files and security-scoped bookmarks are handled.
+  - Define how tool outputs map back into existing UI/parity flows.
+
+  Phase 4: Define the XPC bridge
+  You must specify a concrete service design, not vague aspirations.
+
+  Cover:
+  - XPC service responsibilities.
+  - Process lifecycle rules for the bundled Codex binary.
+  - Stdout/stderr/stdin stream handling.
+  - Request/response/event framing.
+  - Session and thread ownership.
+  - Cancellation behavior.
+  - Restart behavior after child-process crash.
+  - Timeout policy.
+  - Logging and diagnostics.
+  - Container paths and environment variables.
+  - `CODEX_HOME` mapping.
+  - How approvals and tool calls are surfaced to the app shell.
+  - What remains in Swift UI, what lives in the XPC service, and what remains inside Codex/provider logic.
+
+  Be explicit about whether the XPC service:
+  - launches Codex on demand,
+  - keeps it warm per session,
+  - tears it down on app shutdown,
+  - stores any persistent metadata locally.
+
+  State all assumptions and where they need validation.
+
+  Phase 5: Define the parity contract
+  Build a parity matrix for the bounded supported surface.
+
+  At minimum include:
+  - assistant transcript streaming,
+  - tool-call visibility,
+  - tool-result visibility,
+  - approval-required flow,
+  - approval approve/reject behavior,
+  - draft preview generation,
+  - save/apply completion,
+  - provider status rendering,
+  - workspace file persistence,
+  - user style memory loading,
+  - shader conversion,
+  - shader validation,
+  - preview capture,
+  - library save behavior,
+  - error reporting,
+  - crash/reconnect behavior.
+
+  For each parity item, classify:
+  - must-match,
+  - acceptable divergence,
+  - intentionally unsupported in MAS.
+
+  Phase 6: Define the test strategy
+  You must produce a serious test plan, not a generic “add tests” note.
+
+  Required test categories:
+  - Unit tests
+  - Integration tests
+  - End-to-end app/runtime tests
+  - Packaging/signing tests
+  - Security/sandbox tests
+  - Regression tests
+  - Release-readiness gates
+
+  Unit tests must include:
+  - XPC request/response envelope behavior
+  - Codex process manager behavior
+  - `CODEX_HOME` path selection
+  - container path resolution
+  - workspace path confinement
+  - tool allowlist enforcement
+  - timeout/cancellation behavior
+  - crash/restart logic
+  - event translation from Codex/app-server semantics into app-facing events
+
+  Integration tests must include:
+  - a fixture or fake Codex binary/server that exercises stdio transport
+  - happy-path session start, prompt send, streamed deltas, tool call, tool result, completion
+  - broken pipe / child crash / invalid payload / timeout scenarios
+  - tool approval flow round-trips
+  - container-scoped file persistence flows
+  - imported file handling and bookmark handoff behavior
+
+  End-to-end tests must include:
+  - app shell -> XPC -> Codex -> app round-trip
+  - a real or simulated bounded tool call sequence
+  - save draft / preview / save-to-library path
+  - style-memory read/write path
+  - shader conversion and validation flow on the MAS-safe surface
+  - launch, relaunch, and teardown behavior
+
+  Packaging/signing tests must include:
+  - Codex binary presence in the bundle
+  - nested helper/service signing where applicable
+  - inherited sandbox expectations where applicable
+  - absence of forbidden Node/daemon/script payloads in MAS bundle
+  - no localhost transport dependency in MAS path
+  - updated release checks in `scripts/release/testflight-readiness.sh` and related tests
+
+  Security/sandbox tests must include:
+  - no writes outside the container or explicitly granted user-selected locations
+  - no symlink traversal escapes
+  - no arbitrary file path execution
+  - no generic shell access paths
+  - no unexpected network server requirement
+  - security-scoped bookmark handling if user-selected paths are used post-selection
+
+  Regression/reliability tests must include:
+  - restart after Codex crash
+  - session recreation after service interruption
+  - approval flow recovery after reconnect
+  - repeated conversion/validation cycles
+  - cancellation mid-stream
+  - shutdown while work is active
+
+  Release-readiness gates must include:
+  - behavior parity checks, not just policy checks
+  - a MAS assistant smoke suite
+  - a parity scorecard
+  - evidence artifacts with logs/traces
+
+  Phase 7: Define implementation packets
+  Break the work into execution packets that can be assigned to engineers or sub-agents.
+
+  At minimum include:
+  - Packet A: architecture contract extraction and shell/runtime seam
+  - Packet B: XPC service skeleton and typed transport
+  - Packet C: Codex process manager and stdio bridge
+  - Packet D: bounded tool allowlist and workspace/container integration
+  - Packet E: shader conversion/validation MAS-safe path
+  - Packet F: parity harness and test coverage
+  - Packet G: packaging, signing, release gates, and App Review docs
+
+  For each packet specify:
+  - objective,
+  - file/module ownership,
+  - dependencies,
+  - acceptance criteria,
+  - tests to write first,
+  - likely risks,
+  - what must not be changed.
+
+  Phase 8: Identify open questions and force decisions
+  You must extract the true unresolved decisions, not fake ambiguity.
+
+  Examples:
+  - Does Codex login require localhost callback behavior in the native-binary path?
+  - Can MAS provider support ship without browser-style auth?
+  - Should shader conversion be wrapped around bundled binaries or partially ported to native code?
+  - Is `wgsl-text3d` actually required for MAS v1?
+  - Which provider modes are truly in scope for MAS:
+    - `api_key`
+    - `local_model`
+    - Codex-backed protocol lane
+  - How much of the current TypeScript event/tool model should be preserved versus re-expressed natively?
+
+  For each open question provide:
+  - why it matters,
+  - what evidence is missing,
+  - how to answer it,
+  - latest safe default assumption,
+  - who should own the decision.
+
+  Phase 9: Produce repo artifacts
+  At the end of your work, leave behind repo artifacts, not just terminal commentary.
+
+  Expected outputs:
+  - a new or updated plan in `docs/plans/active/`
+  - any supporting reference doc under `docs/app-store/` or another appropriate docs location
+  - clear links to evidence and source files
+  - if you change plan docs, keep them aligned with `docs/plans/README.md` only if required by repo etiquette
+
+  If you decide not to create a new plan and instead update an existing one, justify why that is the better documentation move.
+
+  Working style requirements:
+  - Be concrete and file-specific.
+  - Use primary sources for Apple policy and platform behavior.
+  - Call out inference versus confirmed fact.
+  - Prefer bounded, typed interfaces over ad hoc glue.
+  - Prefer architecture that can survive App Review scrutiny.
+  - Prefer parity harnesses and tests before claiming feasibility.
+  - Surface weak assumptions early.
+  - Do not hand-wave around auth, packaging, or sandbox issues.
+  - If you encounter contradictory repo docs, reconcile them explicitly.
+
+  Definition of success for this task:
+  You leave the repo with a serious, implementation-ready project-management packet for the XPC-to-bundled-Codex bridge, with parity definitions, tests, risk handling, and App-Store-safe constraints clearly documented.
+
+  Final output format:
+  1. Findings and locked facts
+  2. Target architecture
+  3. Parity matrix summary
+  4. Test strategy summary
+  5. Open questions and forced decisions
+  6. Repo artifacts created or updated
+  7. Recommended next implementation packet
+
+  Do not give a vague brainstorm. Drive the project.
