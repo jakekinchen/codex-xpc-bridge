@@ -10,12 +10,12 @@ final class SessionStoreTests: XCTestCase {
         let approval = try RuntimeEventEnvelope.make(
             sessionId: "session",
             kind: .approvalRequired,
-            payload: ApprovalRequiredPayload(toolInvocationId: "convert-1", toolName: .convertShader, reason: "Needs approval", inputSummary: "drafts/demo-input.glsl")
+            payload: ApprovalRequiredPayload(toolInvocationId: "convert-1", toolName: DemoToolID.convertShader, reason: "Needs approval", inputSummary: "drafts/demo-input.glsl")
         )
         let completedTool = try RuntimeEventEnvelope.make(
             sessionId: "session",
             kind: .toolCallCompleted,
-            payload: ToolResultPayload(toolInvocationId: "convert-1", toolName: .convertShader, success: true, summary: "Converted.", artifactPaths: ["/tmp/demo-output.wgsl"])
+            payload: ToolResultPayload(toolInvocationId: "convert-1", toolName: DemoToolID.convertShader, success: true, summary: "Converted.", artifactPaths: ["/tmp/demo-output.wgsl"])
         )
         let done = try RuntimeEventEnvelope.make(sessionId: "session", kind: .assistantMessageCompleted, payload: CompletionPayload(finalText: "Hello world"))
 

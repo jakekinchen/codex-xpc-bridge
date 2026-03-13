@@ -20,7 +20,7 @@ final class ContractCodecTests: XCTestCase {
     func testToolResultPayloadRoundTripsOutputsAndArtifacts() throws {
         let payload = ToolResultPayload(
             toolInvocationId: "validate-1",
-            toolName: .validateShader,
+            toolName: DemoToolID.validateShader,
             success: true,
             summary: "Validation passed.",
             outputs: ["report": .string("diagnostics/report.json")],

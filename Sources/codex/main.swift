@@ -1,9 +1,11 @@
 import Foundation
 import CodexBridgeContract
 
+// Fixture runtime used for integration coverage and packaging smoke tests only.
+
 private struct ToolStep: Sendable {
     let invocationId: String
-    let toolName: ToolName
+    let toolName: ToolID
     let summary: String
     let requiresApproval: Bool
     let arguments: [String: JSONValue]
@@ -53,8 +55,8 @@ private actor CodexEngine {
         let includeLibrarySave = lowercase.contains("full") || lowercase.contains("library") || lowercase.contains("save")
         var queue = [
             ToolStep(
-                invocationId: "write-1",
-                toolName: .writeWorkspaceFile,
+                invocationId: UUID().uuidString,
+                toolName: DemoToolID.writeWorkspaceFile,
                 summary: "Write shader draft",
                 requiresApproval: false,
                 arguments: [
@@ -63,8 +65,8 @@ private actor CodexEngine {
                 ]
             ),
             ToolStep(
-                invocationId: "convert-1",
-                toolName: .convertShader,
+                invocationId: UUID().uuidString,
+                toolName: DemoToolID.convertShader,
                 summary: "Convert shader to WGSL",
                 requiresApproval: true,
                 arguments: [
@@ -73,8 +75,8 @@ private actor CodexEngine {
                 ]
             ),
             ToolStep(
-                invocationId: "validate-1",
-                toolName: .validateShader,
+                invocationId: UUID().uuidString,
+                toolName: DemoToolID.validateShader,
                 summary: "Validate WGSL",
                 requiresApproval: false,
                 arguments: [
@@ -82,8 +84,8 @@ private actor CodexEngine {
                 ]
             ),
             ToolStep(
-                invocationId: "preview-1",
-                toolName: .capturePreview,
+                invocationId: UUID().uuidString,
+                toolName: DemoToolID.capturePreview,
                 summary: "Capture preview",
                 requiresApproval: false,
                 arguments: [
@@ -95,8 +97,8 @@ private actor CodexEngine {
         if includeLibrarySave {
             queue.append(
                 ToolStep(
-                    invocationId: "save-1",
-                    toolName: .saveToLibrary,
+                    invocationId: UUID().uuidString,
+                    toolName: DemoToolID.saveToLibrary,
                     summary: "Save to library",
                     requiresApproval: true,
                     arguments: [

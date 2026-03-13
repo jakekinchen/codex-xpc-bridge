@@ -7,7 +7,7 @@ final class ToolExecutorTests: XCTestCase {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         let resolver = RuntimePathResolver(environment: ["CODEX_BRIDGE_ROOT": root.path])
         let paths = try resolver.ensureBaseDirectories()
-        let executor = CodexToolExecutor(paths: paths, resolver: resolver)
+        let executor = DemoToolExecutor(paths: paths, resolver: resolver)
         let sessionID = "tool-suite"
 
         let importedSource = root.appendingPathComponent("external-input.glsl")
@@ -15,7 +15,7 @@ final class ToolExecutorTests: XCTestCase {
 
         let importResult = try await executor.execute(toolCall: ToolCallPayload(
             toolInvocationId: "import-1",
-            toolName: .importShader,
+            toolName: DemoToolID.importShader,
             summary: "Import shader",
             requiresApproval: false,
             arguments: ["sourcePath": .string(importedSource.path)]
@@ -25,7 +25,7 @@ final class ToolExecutorTests: XCTestCase {
 
         let writeResult = try await executor.execute(toolCall: ToolCallPayload(
             toolInvocationId: "write-1",
-            toolName: .writeWorkspaceFile,
+            toolName: DemoToolID.writeWorkspaceFile,
             summary: "Write draft",
             requiresApproval: false,
             arguments: ["path": .string("drafts/demo-input.glsl"), "content": .string("void main() { gl_FragColor = vec4(1.0); }")]
@@ -34,7 +34,7 @@ final class ToolExecutorTests: XCTestCase {
 
         let convertResult = try await executor.execute(toolCall: ToolCallPayload(
             toolInvocationId: "convert-1",
-            toolName: .convertShader,
+            toolName: DemoToolID.convertShader,
             summary: "Convert shader",
             requiresApproval: true,
             arguments: ["sourcePath": .string("drafts/demo-input.glsl"), "targetPath": .string("drafts/demo-output.wgsl")]
@@ -44,7 +44,7 @@ final class ToolExecutorTests: XCTestCase {
 
         let readResult = try await executor.execute(toolCall: ToolCallPayload(
             toolInvocationId: "read-1",
-            toolName: .readWorkspaceFile,
+            toolName: DemoToolID.readWorkspaceFile,
             summary: "Read WGSL",
             requiresApproval: false,
             arguments: ["path": .string("drafts/demo-output.wgsl")]
@@ -54,7 +54,7 @@ final class ToolExecutorTests: XCTestCase {
 
         let validateResult = try await executor.execute(toolCall: ToolCallPayload(
             toolInvocationId: "validate-1",
-            toolName: .validateShader,
+            toolName: DemoToolID.validateShader,
             summary: "Validate shader",
             requiresApproval: false,
             arguments: ["sourcePath": .string("drafts/demo-output.wgsl")]
@@ -64,7 +64,7 @@ final class ToolExecutorTests: XCTestCase {
 
         let previewResult = try await executor.execute(toolCall: ToolCallPayload(
             toolInvocationId: "preview-1",
-            toolName: .capturePreview,
+            toolName: DemoToolID.capturePreview,
             summary: "Capture preview",
             requiresApproval: false,
             arguments: ["name": .string("demo-preview")]
@@ -74,7 +74,7 @@ final class ToolExecutorTests: XCTestCase {
 
         let styleResult = try await executor.execute(toolCall: ToolCallPayload(
             toolInvocationId: "style-1",
-            toolName: .saveStyleProfile,
+            toolName: DemoToolID.saveStyleProfile,
             summary: "Save style",
             requiresApproval: false,
             arguments: ["name": .string("sunrise"), "profile": .object(["accent": .string("amber")])]
@@ -84,7 +84,7 @@ final class ToolExecutorTests: XCTestCase {
 
         let libraryResult = try await executor.execute(toolCall: ToolCallPayload(
             toolInvocationId: "library-1",
-            toolName: .saveToLibrary,
+            toolName: DemoToolID.saveToLibrary,
             summary: "Save to library",
             requiresApproval: true,
             arguments: ["sourcePath": .string("drafts/demo-output.wgsl"), "name": .string("demo-output.wgsl")]

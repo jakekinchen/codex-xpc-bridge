@@ -4,10 +4,10 @@ import XCTest
 
 final class ApprovalPolicyTests: XCTestCase {
     func testApprovalPolicyIsClosedAndExplicit() {
-        XCTAssertTrue(ApprovalPolicy.requiresExplicitApproval(for: .convertShader))
-        XCTAssertTrue(ApprovalPolicy.requiresExplicitApproval(for: .saveToLibrary))
-        XCTAssertFalse(ApprovalPolicy.requiresExplicitApproval(for: .writeWorkspaceFile))
-        XCTAssertFalse(ApprovalPolicy.requiresExplicitApproval(for: .validateShader))
-        XCTAssertFalse(ApprovalPolicy.requiresExplicitApproval(for: .saveStyleProfile))
+        XCTAssertTrue(ApprovalPolicy.requiresExplicitApproval(for: DemoToolID.convertShader))
+        XCTAssertTrue(ApprovalPolicy.requiresExplicitApproval(for: DemoToolID.saveToLibrary))
+        XCTAssertFalse(ApprovalPolicy.requiresExplicitApproval(for: DemoToolID.writeWorkspaceFile))
+        XCTAssertFalse(ApprovalPolicy.requiresExplicitApproval(for: DemoToolID.validateShader))
+        XCTAssertFalse(ApprovalPolicy.requiresExplicitApproval(for: DemoToolID.saveStyleProfile))
     }
 }

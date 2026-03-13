@@ -21,7 +21,7 @@ final class BridgeProtocolTests: XCTestCase {
     func testToolPayloadRoundTripsWithArguments() throws {
         let toolPayload = ToolCallPayload(
             toolInvocationId: "convert-1",
-            toolName: .convertShader,
+            toolName: DemoToolID.convertShader,
             summary: "Convert shader",
             requiresApproval: true,
             arguments: ["sourcePath": .string("Drafts/input.glsl")]
@@ -32,7 +32,7 @@ final class BridgeProtocolTests: XCTestCase {
         let decodedPayload = try decoded.decodePayload(ToolCallPayload.self)
 
         XCTAssertEqual(decodedPayload.toolInvocationId, "convert-1")
-        XCTAssertEqual(decodedPayload.toolName, .convertShader)
+        XCTAssertEqual(decodedPayload.toolName, DemoToolID.convertShader)
         XCTAssertTrue(decodedPayload.requiresApproval)
         XCTAssertEqual(decodedPayload.arguments["sourcePath"], .string("Drafts/input.glsl"))
     }

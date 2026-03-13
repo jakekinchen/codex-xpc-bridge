@@ -1,8 +1,14 @@
 import Foundation
 import CodexBridgeContract
 
+public protocol ToolHandling: Sendable {
+    func execute(toolCall: ToolCallPayload, sessionID: String) async throws -> ToolResultPayload
+}
+
+public typealias ToolHandlingFactory = @Sendable (RuntimePaths, RuntimePathResolver) -> any ToolHandling
+
 public enum ToolExecutionError: LocalizedError, Equatable {
-    case unsupportedTool(ToolName)
+    case unsupportedTool(ToolID)
     case missingArgument(String)
 
     public var errorDescription: String? {
@@ -15,7 +21,7 @@ public enum ToolExecutionError: LocalizedError, Equatable {
     }
 }
 
-public actor CodexToolExecutor {
+public actor DemoToolExecutor: ToolHandling {
     public let paths: RuntimePaths
     private let resolver: RuntimePathResolver
     private let fileManager: FileManager
@@ -35,24 +41,34 @@ public actor CodexToolExecutor {
     }
 
     private func executeInternal(_ invocation: ToolCallPayload, sessionID: String?) throws -> ToolResultPayload {
-        switch invocation.toolName {
-        case .writeWorkspaceFile:
+        let toolID = invocation.toolName
+
+        if toolID == DemoToolID.writeWorkspaceFile {
             return try writeWorkspaceFile(invocation, sessionID: sessionID)
-        case .readWorkspaceFile:
+        }
+        if toolID == DemoToolID.readWorkspaceFile {
             return try readWorkspaceFile(invocation, sessionID: sessionID)
-        case .convertShader:
+        }
+        if toolID == DemoToolID.convertShader {
             return try convertShader(invocation, sessionID: sessionID)
-        case .validateShader:
+        }
+        if toolID == DemoToolID.validateShader {
             return try validateShader(invocation, sessionID: sessionID)
-        case .capturePreview:
+        }
+        if toolID == DemoToolID.capturePreview {
             return try capturePreview(invocation, sessionID: sessionID)
-        case .saveStyleProfile:
+        }
+        if toolID == DemoToolID.saveStyleProfile {
             return try saveStyleProfile(invocation)
-        case .saveToLibrary:
+        }
+        if toolID == DemoToolID.saveToLibrary {
             return try saveToLibrary(invocation, sessionID: sessionID)
-        case .importShader:
+        }
+        if toolID == DemoToolID.importShader {
             return try importShader(invocation, sessionID: sessionID)
         }
+
+        throw ToolExecutionError.unsupportedTool(toolID)
     }
 
     private func workspaceRoot(for sessionID: String?) throws -> URL {

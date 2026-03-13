@@ -1,4 +1,4 @@
-# Locked Facts: MAS Codex Runtime Project
+# Locked Facts: Codex XPC Bridge Baseline
 
 Date: 2026-03-12
 Owner: Worker C
@@ -6,26 +6,26 @@ Status: Active
 
 ## Purpose
 
-This file is the factual baseline for the cold-start project packet in this repository. It separates:
+This file is the factual baseline for the cold-start bridge package in this repository. It separates:
 
 1. facts confirmed locally in `/Users/jakekinchen/Documents/codex-xpc-bridge`
-2. facts asserted by `prompt-seed.txt` but not verifiable because the referenced host app repo is unavailable
+2. facts asserted by `prompt-seed.txt` but not verifiable because the referenced upstream app repo is unavailable
 3. architectural conclusions that are design decisions, not yet implementation evidence
 
 ## Confirmed local facts
 
-- The current repository contains `prompt-seed.txt` and no implementation files from the referenced host app codebase.
+- The current repository contains `prompt-seed.txt` and no implementation files from the referenced upstream app codebase.
 - The repository path named in the seed prompt, `/path/to/host-app-macos`, does not exist on this machine.
 - The specific files named as authoritative repo docs in the seed prompt cannot be read locally because the target repo is absent:
   - `docs/app-store/mas-codex-runtime-checklist.md`
   - `docs/plans/active/2026-03-09-mas-agent-service-parity-plan.md`
   - `docs/plans/active/2026-03-09-mas-codex-app-server-protocol-prd.md`
   - `docs/plans/active/2026-03-09-swift-codex-control-plane-plan.md`
-- This project packet is therefore a cold-start implementation package derived from the seed prompt plus Apple primary-source constraints, not a code-audited update to the original host app repo.
+- This repository therefore began as a cold-start implementation package derived from the seed prompt plus Apple primary-source constraints, not a code-audited update to an upstream app repo.
 
-## Prompt-asserted repo facts requiring later validation
+## Seed-prompt assertions requiring later validation
 
-The following are treated as requirements or prior-state assertions from `prompt-seed.txt`. They are not locally verified in this repository and must be validated before implementation in a real target repo.
+The following were treated as requirements or prior-state assertions from `prompt-seed.txt`. They are not locally verified in this repository and should be treated as historical context, not package requirements.
 
 - MAS currently stubs out the internal helper runtime in `Sources/HostAppMacOSApp/HostAppInternalHelperRuntime.swift`.
 - MAS packaging currently strips daemon/tool/script payloads in `scripts/release/testflight-readiness.sh`.
@@ -58,7 +58,7 @@ Primary sources:
 - <https://developer.apple.com/library/archive/documentation/Miscellaneous/Reference/EntitlementKeyReference/Chapters/EnablingAppSandbox.html>
 - <https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingXPCServices.html>
 
-## Locked architecture decisions for this packet
+## Locked architecture decisions for this package
 
 These are deliberate project decisions carried forward unless contradicted by new evidence.
 
@@ -67,7 +67,7 @@ These are deliberate project decisions carried forward unless contradicted by ne
 - The XPC service owns Codex process lifecycle and mediates all app-facing runtime traffic.
 - `CODEX_HOME` and all mutable assistant state live in the app container, not inside the app bundle.
 - Tooling is closed over a typed allowlist and is limited to container-scoped or user-granted files.
-- The initial supported surface is WGSL-first and shader-assistant-first, not generic open-ended agent execution.
+- The default demo surface is WGSL-first and shader-assistant-first; real hosts are expected to inject their own bounded tool surface.
 - Approval flows remain visible in the app shell, but approval decisions are enforced by the XPC service before tool execution.
 
 ## Evidence gaps that must be closed in a real implementation repo
@@ -79,6 +79,6 @@ These are deliberate project decisions carried forward unless contradicted by ne
 - Exact bundle structure, entitlements, and signing chain for the app shell, the XPC service, and the bundled Codex binary.
 - Existing UI and persistence seams that can be reused versus rewritten.
 
-## Immediate project consequence
+## Immediate package consequence
 
-No implementation claim in this repository should be read as “already verified in the host app.” The documents created here are an implementation-ready program packet that a real target repo can execute against once the missing codebase is available.
+No implementation claim in this repository should be read as “already verified in some upstream host app.” The package and docs here should be treated as a reusable reference bridge plus historical notes from the original seed prompt.

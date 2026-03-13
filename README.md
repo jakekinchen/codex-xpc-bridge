@@ -34,6 +34,8 @@ CodexXPCBridgeDemo.app/
 - `Sources/CodexBridgeApp/`: SwiftUI macOS shell with transcript, approvals, and artifact surfacing
 - `Sources/codex/`: deterministic demo runtime that speaks the same protocol over stdio
 
+The bundled `codex` target and the default `DemoToolExecutor` are fixture/demo implementations. Real apps are expected to keep the transport/process layers and inject their own tool handler, approval policy, and host artifact behavior into `CodexSessionBroker`.
+
 ## Scripts
 
 - `scripts/package_app.sh`: builds the app, the XPC service, and `codex`, then assembles `CodexXPCBridgeDemo.app`

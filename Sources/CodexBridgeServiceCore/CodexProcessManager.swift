@@ -19,6 +19,7 @@ public actor CodexProcessManager {
     private var stderrHandle: FileHandle?
     private var stdoutBuffer = Data()
     private var stderrBuffer = Data()
+    private var forcedTerminationReason: String?
     private var stopping = false
 
     public init(
@@ -87,6 +88,7 @@ public actor CodexProcessManager {
 
     public func stop(reason: String = "stopped") async {
         stopping = true
+        forcedTerminationReason = reason
         await diagnostics.append("stopping codex process: \(reason)", to: "runtime-service.log")
         stdoutHandle?.readabilityHandler = nil
         stderrHandle?.readabilityHandler = nil
@@ -102,7 +104,8 @@ public actor CodexProcessManager {
         stdinHandle = nil
         stdoutHandle = nil
         stderrHandle = nil
-        let reason = stopping ? "stopped" : "exit_\(status)"
+        let reason = forcedTerminationReason ?? (stopping ? "stopped" : "exit_\(status)")
+        forcedTerminationReason = nil
         await diagnostics.append("codex process terminated: \(reason)", to: "runtime-service.log")
         await terminationHandler(reason)
     }
@@ -121,6 +124,11 @@ public actor CodexProcessManager {
                 await eventHandler(event)
             } catch {
                 await diagnostics.append("stdout decode failure: \(error)", to: "runtime-service.log")
+                forcedTerminationReason = "protocol_violation"
+                stdoutHandle?.readabilityHandler = nil
+                stderrHandle?.readabilityHandler = nil
+                process?.terminate()
+                return
             }
         }
     }

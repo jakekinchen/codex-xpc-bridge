@@ -43,6 +43,3 @@ public struct RuntimeBinaryLocator: @unchecked Sendable {
         return candidates
     }
 }
-
-public typealias CodexBridgeRuntimeBinaryLocator = RuntimeBinaryLocator
-public typealias CodexBridgeRuntimeBinaryLocatorError = RuntimeBinaryLocatorError

@@ -1,14 +1,42 @@
 import Foundation
 
-public enum ToolName: String, Codable, CaseIterable, Sendable {
-    case importShader = "import_shader"
-    case convertShader = "convert_shader"
-    case validateShader = "validate_shader"
-    case capturePreview = "capture_preview"
-    case saveStyleProfile = "save_style_profile"
-    case saveToLibrary = "save_to_library"
-    case readWorkspaceFile = "read_workspace_file"
-    case writeWorkspaceFile = "write_workspace_file"
+public struct ToolID: RawRepresentable, Codable, Hashable, Sendable, ExpressibleByStringLiteral, CustomStringConvertible {
+    public let rawValue: String
+
+    public init(rawValue: String) {
+        self.rawValue = rawValue
+    }
+
+    public init(_ rawValue: String) {
+        self.rawValue = rawValue
+    }
+
+    public init(stringLiteral value: StringLiteralType) {
+        self.rawValue = value
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        self.rawValue = try container.decode(String.self)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+
+    public var description: String { rawValue }
+}
+
+public enum DemoToolID {
+    public static let importShader: ToolID = "import_shader"
+    public static let convertShader: ToolID = "convert_shader"
+    public static let validateShader: ToolID = "validate_shader"
+    public static let capturePreview: ToolID = "capture_preview"
+    public static let saveStyleProfile: ToolID = "save_style_profile"
+    public static let saveToLibrary: ToolID = "save_to_library"
+    public static let readWorkspaceFile: ToolID = "read_workspace_file"
+    public static let writeWorkspaceFile: ToolID = "write_workspace_file"
 }
 
 public enum RuntimeRequestKind: String, Codable, Sendable {
@@ -248,11 +276,13 @@ public struct ApprovalResolutionPayload: Codable, Equatable, Sendable {
 
 public struct ApprovalRequiredPayload: Codable, Equatable, Sendable {
     public let toolInvocationId: String
-    public let toolName: ToolName
+    public let toolName: ToolID
     public let reason: String
     public let inputSummary: String
 
-    public init(toolInvocationId: String, toolName: ToolName, reason: String, inputSummary: String) {
+    public var toolID: ToolID { toolName }
+
+    public init(toolInvocationId: String, toolName: ToolID, reason: String, inputSummary: String) {
         self.toolInvocationId = toolInvocationId
         self.toolName = toolName
         self.reason = reason
@@ -262,10 +292,12 @@ public struct ApprovalRequiredPayload: Codable, Equatable, Sendable {
 
 public struct ApprovalResolvedPayload: Codable, Equatable, Sendable {
     public let toolInvocationId: String
-    public let toolName: ToolName
+    public let toolName: ToolID
     public let decision: ApprovalResolution
 
-    public init(toolInvocationId: String, toolName: ToolName, decision: ApprovalResolution) {
+    public var toolID: ToolID { toolName }
+
+    public init(toolInvocationId: String, toolName: ToolID, decision: ApprovalResolution) {
         self.toolInvocationId = toolInvocationId
         self.toolName = toolName
         self.decision = decision
@@ -274,17 +306,18 @@ public struct ApprovalResolvedPayload: Codable, Equatable, Sendable {
 
 public struct ToolCallPayload: Codable, Equatable, Sendable, Identifiable {
     public let toolInvocationId: String
-    public let toolName: ToolName
+    public let toolName: ToolID
     public let summary: String
     public let requiresApproval: Bool
     public let arguments: [String: JSONValue]
 
     public var id: String { toolInvocationId }
     public var invocationId: String { toolInvocationId }
+    public var toolID: ToolID { toolName }
 
     public init(
         toolInvocationId: String = UUID().uuidString,
-        toolName: ToolName,
+        toolName: ToolID,
         summary: String,
         requiresApproval: Bool,
         arguments: [String: JSONValue]
@@ -298,7 +331,7 @@ public struct ToolCallPayload: Codable, Equatable, Sendable, Identifiable {
 
     public init(
         invocationId: String = UUID().uuidString,
-        toolName: ToolName,
+        toolName: ToolID,
         summary: String,
         requiresApproval: Bool,
         arguments: [String: JSONValue]
@@ -311,7 +344,7 @@ public typealias ToolInvocationPayload = ToolCallPayload
 
 public struct ToolResultPayload: Codable, Equatable, Sendable {
     public let toolInvocationId: String
-    public let toolName: ToolName
+    public let toolName: ToolID
     public let success: Bool
     public let summary: String
     public let outputs: [String: JSONValue]
@@ -320,10 +353,11 @@ public struct ToolResultPayload: Codable, Equatable, Sendable {
     public var invocationId: String { toolInvocationId }
     public var message: String { summary }
     public var output: JSONValue? { outputs.isEmpty ? nil : .object(outputs) }
+    public var toolID: ToolID { toolName }
 
     public init(
         toolInvocationId: String,
-        toolName: ToolName,
+        toolName: ToolID,
         success: Bool,
         summary: String,
         outputs: [String: JSONValue] = [:],
@@ -339,7 +373,7 @@ public struct ToolResultPayload: Codable, Equatable, Sendable {
 
     public init(
         invocationId: String,
-        toolName: ToolName,
+        toolName: ToolID,
         success: Bool,
         message: String,
         output: JSONValue? = nil,

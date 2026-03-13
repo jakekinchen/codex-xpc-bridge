@@ -28,9 +28,11 @@ public struct TranscriptEntry: Identifiable, Equatable, Sendable {
 
 public struct PendingApproval: Identifiable, Equatable, Sendable {
     public let id: String
-    public let toolName: ToolName
+    public let toolName: ToolID
     public let reason: String
     public let summary: String
+
+    public var toolID: ToolID { toolName }
 }
 
 public struct BridgeSessionState: Equatable, Sendable {
