@@ -9,8 +9,10 @@ let package = Package(
     products: [
         .library(name: "CodexBridgeContract", targets: ["CodexBridgeContract"]),
         .library(name: "CodexBridgeSupport", targets: ["CodexBridgeSupport"]),
+        .library(name: "CodexBridgeRelaySupport", targets: ["CodexBridgeRelaySupport"]),
         .library(name: "CodexBridgeXPC", targets: ["CodexBridgeXPC"]),
         .library(name: "CodexBridgeServiceCore", targets: ["CodexBridgeServiceCore"]),
+        .executable(name: "CodexBridgeRelay", targets: ["CodexBridgeRelay"]),
         .executable(name: "CodexXPCBridgeDemo", targets: ["CodexXPCBridgeDemo"]),
         .executable(name: "CodexXPCBridgeService", targets: ["CodexXPCBridgeService"]),
         .executable(name: "codex", targets: ["codex"]),
@@ -26,6 +28,10 @@ let package = Package(
             path: "Sources/CodexBridgeSupport"
         ),
         .target(
+            name: "CodexBridgeRelaySupport",
+            path: "Sources/CodexBridgeRelaySupport"
+        ),
+        .target(
             name: "CodexBridgeXPC",
             dependencies: ["CodexBridgeContract"],
             path: "Sources/CodexBridgeXPC"
@@ -38,6 +44,15 @@ let package = Package(
                 "CodexBridgeXPC",
             ],
             path: "Sources/CodexBridgeServiceCore"
+        ),
+        .executableTarget(
+            name: "CodexBridgeRelay",
+            dependencies: [
+                "CodexBridgeContract",
+                "CodexBridgeRelaySupport",
+                "CodexBridgeXPC",
+            ],
+            path: "Sources/CodexBridgeRelay"
         ),
         .executableTarget(
             name: "CodexXPCBridgeDemo",
@@ -67,6 +82,11 @@ let package = Package(
             name: "CodexBridgeContractTests",
             dependencies: ["CodexBridgeContract"],
             path: "Tests/CodexBridgeContractTests"
+        ),
+        .testTarget(
+            name: "CodexBridgeRelaySupportTests",
+            dependencies: ["CodexBridgeRelaySupport"],
+            path: "Tests/CodexBridgeRelaySupportTests"
         ),
         .testTarget(
             name: "CodexBridgeSupportTests",
