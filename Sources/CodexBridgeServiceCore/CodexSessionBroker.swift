@@ -89,6 +89,7 @@ public actor CodexSessionBroker {
     private func startSession(_ request: RuntimeRequestEnvelope) async throws -> RuntimeReplyEnvelope {
         let session = try await session(for: request.sessionId)
         try await session.startIfNeeded(createPayload: (try? request.decodePayload(SessionCreatePayload.self)) ?? SessionCreatePayload())
+        try await session.waitUntilReady()
         return ack(for: request, detail: "Session ready")
     }
 
@@ -221,6 +222,8 @@ actor CodexSession {
     private var status: RuntimeStatusState = .starting
     private var restartPolicy: RestartPolicy
     private var createPayload = SessionCreatePayload()
+    private var startupReadyReceived = false
+    private var startupWaiters: [CheckedContinuation<Void, Error>] = []
     private var startupTimeoutTask: Task<Void, Never>?
     private var promptTimeoutTask: Task<Void, Never>?
     private var childSilenceTimeoutTask: Task<Void, Never>?
@@ -255,6 +258,7 @@ actor CodexSession {
         self.createPayload = createPayload
         guard processManager == nil else { return }
 
+        startupReadyReceived = false
         cancelIdleTeardown()
 
         let binaryURL = try binaryLocator.locate()
@@ -285,6 +289,20 @@ actor CodexSession {
             payload: try PayloadCoder.encode(createPayload)
         )
         try await manager.send(createRequest)
+    }
+
+    func waitUntilReady() async throws {
+        if startupReadyReceived || status == .ready || status == .busy || status == .waitingForApproval {
+            return
+        }
+
+        if status == .interrupted || status == .failed || status == .stopped || status == .disconnected {
+            throw XPCErrorFactory.message("Runtime failed before the session became ready.")
+        }
+
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            startupWaiters.append(continuation)
+        }
     }
 
     func sendPrompt(_ request: RuntimeRequestEnvelope) async throws {
@@ -355,6 +373,7 @@ actor CodexSession {
         pendingApprovals.removeAll()
         cancelAllTimeouts()
         status = .stopped
+        failStartupWaiters(XPCErrorFactory.message("Runtime stopped before the session became ready."))
         await processManager?.stop(reason: reason)
         processManager = nil
         let ended = RuntimeEventEnvelope(
@@ -403,6 +422,7 @@ actor CodexSession {
             status = payload.state
             switch payload.state {
             case .ready:
+                resolveStartupWaiters()
                 cancelPromptTimeout()
                 cancelChildSilenceTimeout()
                 scheduleIdleTeardown()
@@ -421,7 +441,7 @@ actor CodexSession {
             }
             eventSink(event)
         case .runtimeError:
-            guard (try? event.decodePayload(RuntimeErrorPayload.self)) != nil else {
+            guard let payload = try? event.decodePayload(RuntimeErrorPayload.self) else {
                 await handleProtocolViolation("Invalid runtime error payload.")
                 return
             }
@@ -430,6 +450,9 @@ actor CodexSession {
             cancelChildSilenceTimeout()
             cancelIdleTeardown()
             status = .interrupted
+            failStartupWaiters(
+                XPCErrorFactory.message(payload.message.isEmpty ? "Runtime failed before the session became ready." : payload.message)
+            )
             eventSink(event)
         case .sessionReady:
             guard (try? event.decodePayload(CompletionPayload.self)) != nil else {
@@ -437,6 +460,7 @@ actor CodexSession {
                 return
             }
             cancelStartupTimeout()
+            resolveStartupWaiters()
             eventSink(event)
         default:
             cancelStartupTimeout()
@@ -452,6 +476,7 @@ actor CodexSession {
 
         if let payload = SessionTermination.payload(for: reason) {
             status = .interrupted
+            failStartupWaiters(XPCErrorFactory.message(payload.message))
             eventSink(
                 RuntimeEventEnvelope(
                     sessionId: sessionId,
@@ -469,6 +494,7 @@ actor CodexSession {
             return
         }
 
+        failStartupWaiters(XPCErrorFactory.message(reason))
         eventSink(
             RuntimeEventEnvelope(
                 sessionId: sessionId,
@@ -571,6 +597,23 @@ actor CodexSession {
                     )
                 )
             }
+        }
+    }
+
+    private func resolveStartupWaiters() {
+        startupReadyReceived = true
+        let waiters = startupWaiters
+        startupWaiters.removeAll()
+        for waiter in waiters {
+            waiter.resume()
+        }
+    }
+
+    private func failStartupWaiters(_ error: Error) {
+        let waiters = startupWaiters
+        startupWaiters.removeAll()
+        for waiter in waiters {
+            waiter.resume(throwing: error)
         }
     }
 

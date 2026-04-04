@@ -146,7 +146,12 @@ final class CodexSessionBrokerIntegrationTests: XCTestCase {
         )
 
         let sessionId = "integration-startup-timeout"
-        _ = try await broker.handle(.make(sessionId: sessionId, kind: .createSession, payload: SessionCreatePayload()))
+        do {
+            _ = try await broker.handle(.make(sessionId: sessionId, kind: .createSession, payload: SessionCreatePayload()))
+            XCTFail("Expected create_session to fail when the runtime never becomes ready.")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("timed out"), "Unexpected error: \(error.localizedDescription)")
+        }
 
         let error = try await recorder.waitForRuntimeError(code: "startup_timeout")
         XCTAssertEqual(error.code, "startup_timeout")
@@ -166,7 +171,17 @@ final class CodexSessionBrokerIntegrationTests: XCTestCase {
         )
 
         let sessionId = "integration-protocol-violation"
-        _ = try await broker.handle(.make(sessionId: sessionId, kind: .createSession, payload: SessionCreatePayload()))
+        do {
+            _ = try await broker.handle(.make(sessionId: sessionId, kind: .createSession, payload: SessionCreatePayload()))
+            XCTFail("Expected create_session to fail after malformed runtime stdout.")
+        } catch {
+            XCTAssertTrue(
+                error.localizedDescription.contains("malformed")
+                  || error.localizedDescription.contains("protocol")
+                  || error.localizedDescription.contains("ready"),
+                "Unexpected error: \(error.localizedDescription)",
+            )
+        }
 
         let error = try await recorder.waitForRuntimeError(code: "protocol_violation")
         XCTAssertEqual(error.code, "protocol_violation")

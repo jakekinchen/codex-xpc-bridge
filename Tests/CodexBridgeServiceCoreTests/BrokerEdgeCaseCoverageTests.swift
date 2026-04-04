@@ -43,7 +43,18 @@ final class BrokerEdgeCaseCoverageTests: XCTestCase {
             runtimeURL: try malformedRuntimeURL()
         )
 
-        _ = try await broker.handle(.make(sessionId: "protocol-violation", kind: .createSession, payload: SessionCreatePayload()))
+        do {
+            _ = try await broker.handle(.make(sessionId: "protocol-violation", kind: .createSession, payload: SessionCreatePayload()))
+            XCTFail("Expected create_session to fail after malformed runtime stdout.")
+        } catch {
+            XCTAssertTrue(
+                error.localizedDescription.contains("malformed")
+                  || error.localizedDescription.contains("invalid stdout")
+                  || error.localizedDescription.contains("protocol")
+                  || error.localizedDescription.contains("ready"),
+                "Unexpected error: \(error.localizedDescription)",
+            )
+        }
 
         let error = try await recorder.waitForRuntimeError(code: "protocol_violation")
         XCTAssertEqual(error.code, "protocol_violation")
@@ -60,7 +71,12 @@ final class BrokerEdgeCaseCoverageTests: XCTestCase {
             timeoutPolicy: TimeoutPolicy(startup: 0.1, idleTeardown: 5)
         )
 
-        _ = try await broker.handle(.make(sessionId: "startup-timeout", kind: .createSession, payload: SessionCreatePayload()))
+        do {
+            _ = try await broker.handle(.make(sessionId: "startup-timeout", kind: .createSession, payload: SessionCreatePayload()))
+            XCTFail("Expected create_session to fail when startup times out.")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("timed out"), "Unexpected error: \(error.localizedDescription)")
+        }
 
         let error = try await recorder.waitForRuntimeError(code: "startup_timeout")
         XCTAssertEqual(error.code, "startup_timeout")
