@@ -88,9 +88,25 @@ public actor CodexSessionBroker {
 
     private func startSession(_ request: RuntimeRequestEnvelope) async throws -> RuntimeReplyEnvelope {
         let session = try await session(for: request.sessionId)
-        try await session.startIfNeeded(createPayload: (try? request.decodePayload(SessionCreatePayload.self)) ?? SessionCreatePayload())
-        try await session.waitUntilReady()
-        return ack(for: request, detail: "Session ready")
+        do {
+            try await session.startIfNeeded(createPayload: (try? request.decodePayload(SessionCreatePayload.self)) ?? SessionCreatePayload())
+            try await session.waitUntilReady()
+            return ack(for: request, detail: "Session ready")
+        } catch let failure as BridgeRequestFailure {
+            throw failure
+        } catch {
+            throw BridgeRequestFailure.runtime(
+                RuntimeErrorPayload(
+                    code: "startup_failed",
+                    message: error.localizedDescription,
+                    retryable: false,
+                    details: "The bridge could not start the bundled Codex runtime for this session.",
+                    phase: "startup",
+                    logPath: try? pathResolver.ensureBaseDirectories().logsRoot.appendingPathComponent("runtime-service.log").path,
+                    terminationReason: "startup_failed"
+                )
+            )
+        }
     }
 
     private func session(for sessionId: String) async throws -> CodexSession {
@@ -179,19 +195,69 @@ private enum SessionTermination {
         "idle_timeout",
     ]
 
-    static func payload(for reason: String) -> RuntimeErrorPayload? {
+    static func payload(for reason: String, logPath: String) -> RuntimeErrorPayload? {
         switch reason {
         case "protocol_violation":
-            return RuntimeErrorPayload(code: "protocol_violation", message: "Runtime emitted malformed or invalid stdout.", retryable: false)
+            return RuntimeErrorPayload(
+                code: "protocol_violation",
+                message: "Runtime emitted malformed or invalid stdout.",
+                retryable: false,
+                details: "The bundled Codex runtime produced unreadable output before the bridge could establish a valid session.",
+                phase: "startup",
+                logPath: logPath,
+                terminationReason: reason
+            )
         case "startup_timeout":
-            return RuntimeErrorPayload(code: "startup_timeout", message: "Runtime startup timed out.", retryable: false)
+            return RuntimeErrorPayload(
+                code: "startup_timeout",
+                message: "Runtime startup timed out.",
+                retryable: false,
+                details: "The bundled Codex runtime did not emit session_ready before the startup deadline.",
+                phase: "startup",
+                logPath: logPath,
+                terminationReason: reason
+            )
         case "prompt_timeout":
-            return RuntimeErrorPayload(code: "prompt_timeout", message: "Runtime did not make progress after prompt dispatch.", retryable: false)
+            return RuntimeErrorPayload(
+                code: "prompt_timeout",
+                message: "Runtime did not make progress after prompt dispatch.",
+                retryable: false,
+                details: "The runtime stalled after prompt delivery.",
+                phase: "turn",
+                logPath: logPath,
+                terminationReason: reason
+            )
         case "child_silence_timeout":
-            return RuntimeErrorPayload(code: "child_silence_timeout", message: "Runtime stdout stalled.", retryable: false)
+            return RuntimeErrorPayload(
+                code: "child_silence_timeout",
+                message: "Runtime stdout stalled.",
+                retryable: false,
+                details: "The runtime stopped producing stdout while the bridge was waiting for progress.",
+                phase: "turn",
+                logPath: logPath,
+                terminationReason: reason
+            )
         default:
             return nil
         }
+    }
+}
+
+struct BridgeRequestFailure: Error, LocalizedError {
+    let message: String
+    let payload: RuntimeErrorPayload?
+
+    init(message: String, payload: RuntimeErrorPayload? = nil) {
+        self.message = message
+        self.payload = payload
+    }
+
+    static func runtime(_ payload: RuntimeErrorPayload) -> BridgeRequestFailure {
+        BridgeRequestFailure(message: payload.message, payload: payload)
+    }
+
+    var errorDescription: String? {
+        message
     }
 }
 
@@ -224,6 +290,7 @@ actor CodexSession {
     private var createPayload = SessionCreatePayload()
     private var startupReadyReceived = false
     private var startupWaiters: [CheckedContinuation<Void, Error>] = []
+    private var startupFailure: BridgeRequestFailure?
     private var startupTimeoutTask: Task<Void, Never>?
     private var promptTimeoutTask: Task<Void, Never>?
     private var childSilenceTimeoutTask: Task<Void, Never>?
@@ -259,6 +326,7 @@ actor CodexSession {
         guard processManager == nil else { return }
 
         startupReadyReceived = false
+        startupFailure = nil
         cancelIdleTeardown()
 
         let binaryURL = try binaryLocator.locate()
@@ -297,7 +365,7 @@ actor CodexSession {
         }
 
         if status == .interrupted || status == .failed || status == .stopped || status == .disconnected {
-            throw XPCErrorFactory.message("Runtime failed before the session became ready.")
+            throw startupFailure ?? BridgeRequestFailure(message: "Runtime failed before the session became ready.")
         }
 
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
@@ -373,7 +441,7 @@ actor CodexSession {
         pendingApprovals.removeAll()
         cancelAllTimeouts()
         status = .stopped
-        failStartupWaiters(XPCErrorFactory.message("Runtime stopped before the session became ready."))
+        failStartupWaiters(BridgeRequestFailure(message: "Runtime stopped before the session became ready."))
         await processManager?.stop(reason: reason)
         processManager = nil
         let ended = RuntimeEventEnvelope(
@@ -450,9 +518,26 @@ actor CodexSession {
             cancelChildSilenceTimeout()
             cancelIdleTeardown()
             status = .interrupted
-            failStartupWaiters(
-                XPCErrorFactory.message(payload.message.isEmpty ? "Runtime failed before the session became ready." : payload.message)
-            )
+            let failurePayload = payload.message.isEmpty
+                ? RuntimeErrorPayload(
+                    code: payload.code,
+                    message: "Runtime failed before the session became ready.",
+                    retryable: payload.retryable,
+                    details: payload.details,
+                    phase: payload.phase,
+                    logPath: payload.logPath ?? runtimeServiceLogPath,
+                    terminationReason: payload.terminationReason
+                )
+                : RuntimeErrorPayload(
+                    code: payload.code,
+                    message: payload.message,
+                    retryable: payload.retryable,
+                    details: payload.details,
+                    phase: payload.phase,
+                    logPath: payload.logPath ?? runtimeServiceLogPath,
+                    terminationReason: payload.terminationReason
+                )
+            failStartupWaiters(BridgeRequestFailure.runtime(failurePayload))
             eventSink(event)
         case .sessionReady:
             guard (try? event.decodePayload(CompletionPayload.self)) != nil else {
@@ -474,9 +559,9 @@ actor CodexSession {
 
         guard !SessionTermination.ignoredReasons.contains(reason) else { return }
 
-        if let payload = SessionTermination.payload(for: reason) {
+        if let payload = SessionTermination.payload(for: reason, logPath: runtimeServiceLogPath) {
             status = .interrupted
-            failStartupWaiters(XPCErrorFactory.message(payload.message))
+            failStartupWaiters(BridgeRequestFailure.runtime(payload))
             eventSink(
                 RuntimeEventEnvelope(
                     sessionId: sessionId,
@@ -494,13 +579,22 @@ actor CodexSession {
             return
         }
 
-        failStartupWaiters(XPCErrorFactory.message(reason))
+        let payload = RuntimeErrorPayload(
+            code: "runtime_interrupted",
+            message: reason,
+            retryable: true,
+            details: "The bundled Codex runtime terminated before session startup completed.",
+            phase: "startup",
+            logPath: runtimeServiceLogPath,
+            terminationReason: reason
+        )
+        failStartupWaiters(BridgeRequestFailure.runtime(payload))
         eventSink(
             RuntimeEventEnvelope(
                 sessionId: sessionId,
                 kind: .serviceInterrupted,
                 payload: try? PayloadCoder.encode(
-                    RuntimeErrorPayload(code: "runtime_interrupted", message: reason, retryable: true)
+                    payload
                 )
             )
         )
@@ -512,7 +606,15 @@ actor CodexSession {
                     sessionId: sessionId,
                     kind: .runtimeError,
                     payload: try? PayloadCoder.encode(
-                        RuntimeErrorPayload(code: "runtime_crash", message: "Runtime exited unexpectedly.", retryable: true)
+                        RuntimeErrorPayload(
+                            code: "runtime_crash",
+                            message: "Runtime exited unexpectedly.",
+                            retryable: true,
+                            details: "The bundled Codex runtime crashed after the bridge established the process.",
+                            phase: "startup",
+                            logPath: runtimeServiceLogPath,
+                            terminationReason: reason
+                        )
                     )
                 )
             )
@@ -536,7 +638,15 @@ actor CodexSession {
                     sessionId: sessionId,
                     kind: .runtimeError,
                     payload: try? PayloadCoder.encode(
-                        RuntimeErrorPayload(code: "restart_failed", message: error.localizedDescription, retryable: false)
+                        RuntimeErrorPayload(
+                            code: "restart_failed",
+                            message: error.localizedDescription,
+                            retryable: false,
+                            details: "The bridge could not restart the bundled Codex runtime after an interruption.",
+                            phase: "startup",
+                            logPath: runtimeServiceLogPath,
+                            terminationReason: reason
+                        )
                     )
                 )
             )
@@ -602,6 +712,7 @@ actor CodexSession {
 
     private func resolveStartupWaiters() {
         startupReadyReceived = true
+        startupFailure = nil
         let waiters = startupWaiters
         startupWaiters.removeAll()
         for waiter in waiters {
@@ -610,11 +721,20 @@ actor CodexSession {
     }
 
     private func failStartupWaiters(_ error: Error) {
+        if let failure = error as? BridgeRequestFailure {
+            startupFailure = failure
+        } else {
+            startupFailure = BridgeRequestFailure(message: error.localizedDescription)
+        }
         let waiters = startupWaiters
         startupWaiters.removeAll()
         for waiter in waiters {
             waiter.resume(throwing: error)
         }
+    }
+
+    private var runtimeServiceLogPath: String {
+        paths.logsRoot.appendingPathComponent("runtime-service.log").path
     }
 
     private func executeTool(_ routedToolCall: RoutedToolCall) async throws {

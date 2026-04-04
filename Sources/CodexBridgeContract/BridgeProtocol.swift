@@ -228,17 +228,45 @@ public struct RuntimeErrorPayload: Codable, Equatable, Sendable {
     public let code: String
     public let message: String
     public let retryable: Bool
+    public let details: String?
+    public let phase: String?
+    public let logPath: String?
+    public let terminationReason: String?
 
-    public init(code: String, message: String, retryable: Bool) {
+    public init(
+        code: String,
+        message: String,
+        retryable: Bool,
+        details: String? = nil,
+        phase: String? = nil,
+        logPath: String? = nil,
+        terminationReason: String? = nil
+    ) {
         self.code = code
         self.message = message
         self.retryable = retryable
+        self.details = details
+        self.phase = phase
+        self.logPath = logPath
+        self.terminationReason = terminationReason
     }
 
-    public init(code: String, message: String, isRecoverable: Bool) {
+    public init(
+        code: String,
+        message: String,
+        isRecoverable: Bool,
+        details: String? = nil,
+        phase: String? = nil,
+        logPath: String? = nil,
+        terminationReason: String? = nil
+    ) {
         self.code = code
         self.message = message
         self.retryable = isRecoverable
+        self.details = details
+        self.phase = phase
+        self.logPath = logPath
+        self.terminationReason = terminationReason
     }
 
     public var isRecoverable: Bool { retryable }

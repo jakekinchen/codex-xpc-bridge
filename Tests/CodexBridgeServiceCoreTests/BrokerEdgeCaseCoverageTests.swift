@@ -3,6 +3,7 @@ import XCTest
 @testable import CodexBridgeContract
 @testable import CodexBridgeSupport
 @testable import CodexBridgeServiceCore
+@testable import CodexBridgeXPC
 
 final class BrokerEdgeCaseCoverageTests: XCTestCase {
     func testBrokerOverridesRuntimeApprovalFlagForApprovalRequiredTool() async throws {
@@ -81,8 +82,55 @@ final class BrokerEdgeCaseCoverageTests: XCTestCase {
         let error = try await recorder.waitForRuntimeError(code: "startup_timeout")
         XCTAssertEqual(error.code, "startup_timeout")
         XCTAssertFalse(error.retryable)
+        XCTAssertEqual(error.phase, "startup")
+        XCTAssertEqual(error.details, "The bundled Codex runtime did not emit session_ready before the startup deadline.")
+        XCTAssertEqual(error.terminationReason, "startup_timeout")
+        XCTAssertTrue(error.logPath?.hasSuffix("/logs/runtime-service.log") == true)
         try await recorder.waitForKind(.serviceInterrupted)
         XCTAssertFalse(recorder.kinds().contains(.serviceRecovered))
+    }
+
+    func testConnectionHandlerReturnsStructuredRejectedReplyForStartupTimeout() async throws {
+        let recorder = BrokerEventRecorder()
+        let sessionID = "handler-startup-timeout"
+        let broker = try makeBroker(
+            recorder: recorder,
+            runtimeURL: try silentRuntimeURL(),
+            timeoutPolicy: TimeoutPolicy(startup: 0.1, idleTeardown: 5)
+        )
+        let handler = CodexBridgeConnectionHandler(broker: broker, client: nil)
+        let request = try RuntimeRequestEnvelope.make(
+            sessionId: sessionID,
+            kind: .createSession,
+            payload: SessionCreatePayload()
+        )
+        let requestData = try XPCEnvelopeCodec.encodeRequest(request)
+
+        let responseData = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
+            handler.send(requestData) { data, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                guard let data else {
+                    continuation.resume(throwing: XPCErrorFactory.message("Expected rejected reply payload."))
+                    return
+                }
+                continuation.resume(returning: data)
+            }
+        }
+
+        let reply = try XPCEnvelopeCodec.decodeResponse(responseData)
+        XCTAssertFalse(reply.accepted)
+        XCTAssertEqual(reply.requestId, request.requestId)
+        XCTAssertEqual(reply.message, "Runtime startup timed out.")
+
+        let payload = try XCTUnwrap(reply.payload?.decode(RuntimeErrorPayload.self))
+        XCTAssertEqual(payload.code, "startup_timeout")
+        XCTAssertEqual(payload.phase, "startup")
+        XCTAssertEqual(payload.details, "The bundled Codex runtime did not emit session_ready before the startup deadline.")
+        XCTAssertEqual(payload.terminationReason, "startup_timeout")
+        XCTAssertTrue(payload.logPath?.hasSuffix("/logs/runtime-service.log") == true)
     }
 
     func testApprovalWaitTimeoutFailsToolAndIgnoresLateResolution() async throws {

@@ -48,15 +48,33 @@ public final class CodexBridgeConnectionHandler: NSObject, CodexBridgeServiceXPC
         super.init()
     }
 
+    init(broker: CodexSessionBroker, client: (any CodexBridgeClientXPCProtocol)?) {
+        self.clientForwarder = ClientForwarder(client: client)
+        self.broker = broker
+        super.init()
+    }
+
     public func send(_ requestData: Data, reply: @escaping (Data?, NSError?) -> Void) {
         let replyBox = SendReplyBox(reply: reply)
         Task {
+            let request: RuntimeRequestEnvelope
             do {
-                let request = try XPCEnvelopeCodec.decodeRequest(requestData)
+                request = try XPCEnvelopeCodec.decodeRequest(requestData)
+            } catch {
+                replyBox.call(nil, XPCErrorFactory.make(error))
+                return
+            }
+
+            do {
                 let response = try await broker.handle(request)
                 replyBox.call(try XPCEnvelopeCodec.encodeResponse(response), nil)
             } catch {
-                replyBox.call(nil, XPCErrorFactory.make(error))
+                do {
+                    let rejectedPayload = try rejectedReplyData(for: request, error: error)
+                    replyBox.call(rejectedPayload, nil)
+                } catch {
+                    replyBox.call(nil, XPCErrorFactory.make(error))
+                }
             }
         }
     }
@@ -67,5 +85,16 @@ public final class CodexBridgeConnectionHandler: NSObject, CodexBridgeServiceXPC
             await broker.shutdown()
             replyBox.call(nil)
         }
+    }
+
+    private func rejectedReplyData(for request: RuntimeRequestEnvelope, error: Error) throws -> Data {
+        let failure = error as? BridgeRequestFailure
+        let reply = RuntimeReplyEnvelope(
+            requestId: request.requestId,
+            accepted: false,
+            message: failure?.message ?? error.localizedDescription,
+            payload: try failure?.payload.map(PayloadCoder.encode)
+        )
+        return try XPCEnvelopeCodec.encodeResponse(reply)
     }
 }
