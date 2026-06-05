@@ -7,6 +7,7 @@ All notable project-facing changes are tracked here.
 ## 0.1.1
 
 - Lower the Swift tools requirement to 6.1 so GitHub Actions `macos-latest` can build and test the package.
+- Use the current `actions/checkout` major version in CI.
 - Prepare the repository for public open-source use with MIT licensing, contribution guidance, security reporting, CI, issue templates, and clearer README positioning.
 
 ## 0.1.0
