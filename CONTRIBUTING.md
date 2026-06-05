@@ -15,7 +15,7 @@ Thanks for helping improve `CodexXPCBridge`. The project is intended to stay sma
 Requirements:
 
 - macOS 14 or newer
-- Swift 6.2 or newer
+- Swift 6.1 or newer
 
 Run the full local check before opening a pull request:
 

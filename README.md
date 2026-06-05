@@ -65,7 +65,7 @@ The bundled `codex` target and the default `DemoToolExecutor` are fixture/demo i
 Requirements:
 
 - macOS 14 or newer
-- Swift 6.2 or newer
+- Swift 6.1 or newer
 
 Run the tests:
 
